@@ -21,4 +21,28 @@
   };
 
   system.stateVersion = "25.11";
+
+  # VM-only debug surface — SSH on host port 2222 so smoke tests can inspect
+  # the kiosk session journal. Does not affect the appliance ISO.
+  virtualisation.vmVariant = {
+    services.openssh = {
+      enable = true;
+      settings.PermitRootLogin = "yes";
+      settings.PermitEmptyPasswords = "yes";
+    };
+    users.users.root.hashedPassword = "";
+    security.pam.services.sshd.allowNullPassword = true;
+    virtualisation.forwardPorts = [
+      { from = "host"; host.port = 2222; guest.port = 22; }
+    ];
+
+    # qemu has no GPU acceleration; let wlroots fall back to llvmpipe so cage
+    # can actually render. Real hardware has a real GPU and won't need this.
+    services.cage.environment = {
+      WLR_RENDERER_ALLOW_SOFTWARE = "1";
+      # No audio stack until S2; tell SDL to use the dummy driver so USDX
+      # doesn't bail out on missing PulseAudio/ALSA hardware in the VM.
+      SDL_AUDIODRIVER = "dummy";
+    };
+  };
 }

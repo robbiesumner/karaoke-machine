@@ -66,7 +66,7 @@ docs/                  # end-user + contributor docs
 
 ## Open decisions
 
-- **Compositor:** `cage` (Wayland kiosk) preferred. Fall back to Xorg + minimal WM if USDX/SDL renders poorly. VM-test first.
+- **Compositor:** `cage` (Wayland kiosk). S1 VM-tested: cage starts, USDX renders fullscreen via native Wayland (`SDL_VIDEODRIVER=wayland` in `karaoke-session` — without it sdl2-compat picks Xwayland and ABRTs cage on USDX exit via the wlroots `xwayland_surface_destroy` assert). Inner shell loop respawns USDX on SIGTERM/SIGKILL, systemd `Restart=always` recovers cage on rare wlroots crashes. VM caveats — only present in `vmVariant`, real HW unaffected: needs `-vga virtio`, `WLR_RENDERER_ALLOW_SOFTWARE=1` (no GPU acceleration in qemu, llvmpipe path only), and `SDL_AUDIODRIVER=dummy` (no audio stack until S2). VM perf is unusable (TCG + llvmpipe + VNC stack) — that's a VM artifact, not a kiosk issue; real Beelink performance verified at S7. If HW rendering is poor on the N100, fall back to Xorg + minimal WM.
 - **Keyboard:** USB-dongle assumed. Bluetooth needs pre-pairing → breaks plug-and-play → v2.
 - **Updates:** v1 = reflash ISO. Remote-flake `nixos-rebuild` is v2.
 - **Auto-rescan:** v1 = press `R`. Filesystem watcher is nicer but more complex; reconsider after real-party usage.
