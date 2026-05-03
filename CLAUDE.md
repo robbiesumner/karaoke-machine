@@ -23,7 +23,7 @@ Plug-and-play karaoke appliance. NixOS, declarative, shipped as flashable ISO. B
 
 ## User flows
 
-**First boot (owner, once):** flash ISO → installer wipes disk → TUI wizard on tty1 asks WiFi + hostname → writes config, touches sentinel, reboots → never shown again.
+**First boot (owner, once):** flash ISO → installer wipes disk → TUI wizard on tty1 asks WiFi → writes config, touches sentinel, reboots → never shown again.
 
 **Daily:** plug in → ~30s → USDX song-select on TV → arrow keys + Enter.
 
@@ -36,7 +36,7 @@ Four NixOS modules:
 1. **Kiosk session.** Autologin to `karaoke` user, no DM. Compositor launches USDX fullscreen. Crash → relaunch (never show desktop).
 2. **Audio.** PipeWire exposes SingStar's 2 channels as independent mic inputs (not stereo).
 3. **Samba.** Single share `songs` → `/var/lib/karaoke/songs/`, read-write, no auth.
-4. **First-boot wizard.** Systemd unit, gated by sentinel, whiptail TUI on tty1, WiFi + hostname, reboots.
+4. **First-boot wizard.** Systemd unit, gated by sentinel, whiptail TUI on tty1, WiFi only, reboots. Hostname is fixed to `karaoke` declaratively (no per-device customization in v1 — keeps `\\karaoke\songs` and `karaoke.local` valid for everyone).
 
 ## Repository layout (target — bootstrap in progress)
 
@@ -76,7 +76,7 @@ docs/                  # end-user + contributor docs
 - **SingStar = 1 USB device, 2 channels.** PipeWire sees one source; USDX must treat ch1/ch2 as separate mics, not stereo. Config in `nix/modules/audio.nix`.
 - **USDX on Wayland is flaky.** Xwayland or pure Xorg if needed. Don't over-engineer.
 - **USDX scales weirdly on 4K.** Force 1080p in kiosk session.
-- **mDNS/Samba** depends on router multicast. Wizard should show device IP at idle for `\\192.168.x.x\songs` fallback.
+- **mDNS/Samba** depends on router multicast. tty2 login banner (`services.getty.helpLine`) shows current IPv4 as `\\192.168.x.x\songs` fallback when `karaoke.local` doesn't resolve.
 - **SMB:** default SMB2+. Don't accommodate ancient Windows.
 - **Trackpad on the keyboard is irrelevant** to USDX. Don't design around it.
 

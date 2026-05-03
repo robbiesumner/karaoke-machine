@@ -48,13 +48,14 @@ VM can't fully verify — needs real dongle. State explicitly in PR: `pactl list
 
 ## S5 — First-boot wizard
 
-**Goal:** fresh install → tty1 wizard asks WiFi + hostname → writes config → reboots → never seen again.
+**Goal:** fresh install → tty1 wizard asks WiFi → writes config → reboots → never seen again.
 
 - Systemd unit `karaoke-firstboot.service`, ordered before kiosk session.
 - Gate: `ConditionPathExists=!/var/lib/karaoke/.firstboot-done`.
-- whiptail TUI in `pkgs.writeShellApplication`. Validate: SSID non-empty, hostname matches `^[a-z0-9-]+$`.
-- Writes `/etc/NetworkManager/system-connections/<ssid>.nmconnection` (mode 600), sets hostname via sidecar file, touches sentinel, `systemctl reboot`.
+- whiptail TUI in `pkgs.writeShellApplication`. SSID may be empty (wired); PSK required if SSID set.
+- Writes `/etc/NetworkManager/system-connections/<ssid>.nmconnection` (mode 600), touches sentinel, `systemctl reboot`.
 - Kiosk session blocked until sentinel exists.
+- Hostname is fixed to `karaoke` declaratively (set in `nix/system.nix`). No per-device customization in v1 — `karaoke.local` works for everyone, and `hostnamectl set-hostname --transient` is overridden by NixOS's static hostname anyway.
 
 **Smoke tick:** first boot runs wizard; second boot skips.
 
