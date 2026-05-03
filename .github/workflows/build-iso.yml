@@ -1,0 +1,59 @@
+name: Build ISO
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'nix/**', 'flake.nix') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-
+          purge-created: 0
+          purge-last-accessed: 604800
+          purge-primary-key: never
+
+      - name: Build ISO
+        run: nix build .#iso --print-build-logs
+
+      - name: Stage artifact + checksum
+        run: |
+          iso=$(readlink -f result/iso/karaoke-installer.iso)
+          cp "$iso" karaoke-installer.iso
+          sha256sum karaoke-installer.iso > karaoke-installer.iso.sha256
+
+      - name: Upload workflow artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: karaoke-installer-iso
+          path: |
+            karaoke-installer.iso
+            karaoke-installer.iso.sha256
+          retention-days: 14
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            karaoke-installer.iso
+            karaoke-installer.iso.sha256
