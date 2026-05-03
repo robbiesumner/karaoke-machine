@@ -21,12 +21,15 @@
     {
       nixosConfigurations.karaoke = nixpkgs.lib.nixosSystem {
         inherit system;
+        specialArgs = { inherit self; };
         modules = modules ++ [ ./nix/system.nix ];
       };
 
       nixosConfigurations.iso = nixpkgs.lib.nixosSystem {
         inherit system;
+        specialArgs = { inherit self; };
         modules = modules ++ [
+          ./nix/modules/installer.nix
           ./nix/iso.nix
           "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
         ];
