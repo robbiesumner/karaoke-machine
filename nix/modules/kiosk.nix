@@ -20,16 +20,28 @@ let
 
       # Relaunch loop — never let the session end. Exiting would expose
       # cage's empty root or, worse, drop back to a TTY.
+      # -songpath points USDX at the Samba-shared songs dir so drops via
+      # \\karaoke\songs are picked up on the next R-rescan.
       while true; do
-        ultrastardx || true
+        ultrastardx -songpath ${cfg.songPath} || true
         sleep 1
       done
     '';
   };
 in
 {
-  options.services.karaoke.kiosk.enable =
-    lib.mkEnableOption "USDX kiosk session";
+  options.services.karaoke.kiosk = {
+    enable = lib.mkEnableOption "USDX kiosk session";
+
+    songPath = lib.mkOption {
+      type = lib.types.path;
+      default = "/var/lib/karaoke/songs";
+      description = ''
+        Directory passed to USDX as -songpath. Should match the Samba share
+        path so drops via the network share are visible to the engine.
+      '';
+    };
+  };
 
   config = lib.mkIf cfg.enable {
     users.users.karaoke = {
