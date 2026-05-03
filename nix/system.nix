@@ -40,9 +40,10 @@
     # can actually render. Real hardware has a real GPU and won't need this.
     services.cage.environment = {
       WLR_RENDERER_ALLOW_SOFTWARE = "1";
-      # No audio stack until S2; tell SDL to use the dummy driver so USDX
-      # doesn't bail out on missing PulseAudio/ALSA hardware in the VM.
-      SDL_AUDIODRIVER = "dummy";
     };
+
+    # No SingStar dongle in the VM — synthesise the upstream stereo source so
+    # the channel-split loopbacks still produce two named mono sources.
+    services.karaoke.audio.stubSource = true;
   };
 }
