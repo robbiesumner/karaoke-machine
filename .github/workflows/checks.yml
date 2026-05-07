@@ -3,10 +3,39 @@ name: Checks
 on:
   pull_request:
     branches: [main]
+    types: [opened, edited, synchronize, reopened]
   push:
     branches: [main]
 
+permissions:
+  pull-requests: read
+
 jobs:
+  lint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            nix
+            docs
+            chore
+            ci
+            refactor
+            test
+            build
+            perf
+          requireScope: false
+          subjectPattern: ^[a-z].*[^.]$
+          subjectPatternError: |
+            PR title subject must start lowercase and not end with a period.
+            Example: "feat(audio): split SingStar mics into two PipeWire sources"
+
   flake:
     runs-on: ubuntu-latest
     steps:
