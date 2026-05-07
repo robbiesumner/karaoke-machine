@@ -1,0 +1,20 @@
+#!/bin/sh
+# live-build configuration for the karaoke-machine ISO.
+# Invoked by `lb config` (which is invoked by scripts/build-iso.sh).
+set -e
+
+lb config noauto \
+  --mode debian \
+  --distribution bookworm \
+  --architectures amd64 \
+  --binary-images iso-hybrid \
+  --bootloaders "syslinux,grub-efi" \
+  --linux-flavours amd64 \
+  --archive-areas "main contrib non-free non-free-firmware" \
+  --apt-recommends false \
+  --memtest none \
+  --image-name karaoke-machine \
+  --iso-application "karaoke-machine" \
+  --iso-publisher "https://github.com/robbiesumner/karaoke-machine" \
+  --iso-volume "karaoke-machine" \
+  "${@}"

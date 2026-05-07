@@ -30,38 +30,16 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::scripts/build-iso.sh or iso/ missing — ISO build skipped (pre-v0.1)."
+            echo "::notice::scripts/build-iso.sh or iso/ missing — ISO build skipped."
           fi
-
-      - name: Cache live-build chroot
-        if: steps.gate.outputs.ready == 'true'
-        uses: actions/cache@v4
-        with:
-          path: |
-            build/cache
-            build/.build
-          key: live-build-${{ hashFiles('iso/config/package-lists/**', 'iso/auto/**') }}
-          restore-keys: |
-            live-build-
-
-      - name: Install live-build toolchain
-        if: steps.gate.outputs.ready == 'true'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            live-build debootstrap squashfs-tools xorriso \
-            isolinux syslinux-common \
-            grub-pc-bin grub-efi-amd64-bin \
-            mtools dosfstools
 
       - name: Build ISO
         if: steps.gate.outputs.ready == 'true'
-        run: sudo ./scripts/build-iso.sh
+        run: ./scripts/build-iso.sh
 
-      - name: Compute SHA256SUMS
+      - name: Take ownership of build artifacts
         if: steps.gate.outputs.ready == 'true'
-        working-directory: build
-        run: sha256sum karaoke-machine-*.iso > SHA256SUMS
+        run: sudo chown -R "$USER":"$USER" build/
 
       - name: Upload ISO artifact
         if: steps.gate.outputs.ready == 'true'
@@ -70,7 +48,7 @@ jobs:
           name: karaoke-machine-iso-${{ github.sha }}
           path: |
             build/karaoke-machine-*.iso
-            build/SHA256SUMS
+            build/karaoke-machine-*.iso.sha256
           retention-days: 14
           if-no-files-found: error
 
@@ -80,5 +58,5 @@ jobs:
         with:
           files: |
             build/karaoke-machine-*.iso
-            build/SHA256SUMS
+            build/karaoke-machine-*.iso.sha256
           fail_on_unmatched_files: true
