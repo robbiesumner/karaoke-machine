@@ -34,13 +34,31 @@ case "$(uname -s)" in
   *)      accel="tcg" ;;
 esac
 
+firmware_args=()
+for fw in \
+  /usr/local/share/qemu/edk2-x86_64-code.fd \
+  /opt/homebrew/share/qemu/edk2-x86_64-code.fd \
+  /usr/share/OVMF/OVMF_CODE.fd \
+  /usr/share/edk2/x64/OVMF_CODE.fd
+do
+  if [[ -f "$fw" ]]; then
+    firmware_args=(-bios "$fw")
+    echo ">>> Using UEFI firmware: $fw"
+    break
+  fi
+done
+if (( ${#firmware_args[@]} == 0 )); then
+  echo ">>> No UEFI firmware found, falling back to legacy BIOS"
+fi
+
 echo ">>> Booting $iso (accel=$accel)"
 exec qemu-system-x86_64 \
   -machine "accel=$accel" \
+  "${firmware_args[@]}" \
   -m 4G \
   -smp 2 \
   -cdrom "$iso" \
-  -vga cirrus \
+  -vga virtio \
   -usb \
   -device usb-kbd \
   -k en-us
