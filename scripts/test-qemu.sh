@@ -40,4 +40,7 @@ exec qemu-system-x86_64 \
   -m 4G \
   -smp 2 \
   -cdrom "$iso" \
-  -vga virtio
+  -vga virtio \
+  -usb \
+  -device usb-kbd \
+  -device usb-tablet
