@@ -40,7 +40,7 @@ exec qemu-system-x86_64 \
   -m 4G \
   -smp 2 \
   -cdrom "$iso" \
-  -vga std \
+  -vga cirrus \
   -usb \
   -device usb-kbd \
   -k en-us
