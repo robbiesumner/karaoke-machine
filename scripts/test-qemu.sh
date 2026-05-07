@@ -16,11 +16,17 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
   exit 1
 fi
 
-iso="$(ls -t "$REPO_ROOT"/build/karaoke-machine-*.iso 2>/dev/null | head -n1 || true)"
-if [[ -z "$iso" ]]; then
+shopt -s nullglob
+isos=("$REPO_ROOT"/build/karaoke-machine-*.iso)
+shopt -u nullglob
+if (( ${#isos[@]} == 0 )); then
   echo "No ISO in build/. Run scripts/build-iso.sh first." >&2
   exit 1
 fi
+iso="${isos[0]}"
+for f in "${isos[@]}"; do
+  [[ "$f" -nt "$iso" ]] && iso="$f"
+done
 
 case "$(uname -s)" in
   Linux)  accel="kvm:tcg" ;;
