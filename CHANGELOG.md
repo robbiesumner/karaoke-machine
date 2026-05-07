@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/robbiesumner/karaoke-machine/compare/v1.0.0...v1.1.0) (2026-05-07)
+
+
+### Features
+
+* **kiosk:** silent boot for appliance UX ([25f2dfc](https://github.com/robbiesumner/karaoke-machine/commit/25f2dfcdad4180a99a4650f970ffd699a11a0c92))
+* **kiosk:** silent boot for appliance UX ([0f90c7a](https://github.com/robbiesumner/karaoke-machine/commit/0f90c7aa4b501778b9ebcceb40eba9cd9c48cfa8))
+
 ## 1.0.0 (2026-05-03)
 
 
