@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check buildable
         id: gate
@@ -35,7 +35,7 @@ jobs:
 
       - name: Cache live-build chroot
         if: steps.gate.outputs.ready == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             build/cache
@@ -65,7 +65,7 @@ jobs:
 
       - name: Upload ISO artifact
         if: steps.gate.outputs.ready == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: karaoke-machine-iso-${{ github.sha }}
           path: |
@@ -76,7 +76,7 @@ jobs:
 
       - name: Attach to GitHub Release
         if: steps.gate.outputs.ready == 'true' && startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             build/karaoke-machine-*.iso
