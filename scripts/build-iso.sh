@@ -24,9 +24,14 @@ mkdir -p "$BUILD_DIR"
 
 echo ">>> Building karaoke-machine ISO version: $VERSION"
 
+# The live-build chroot is created via debootstrap, which requires `mknod` to
+# populate /dev. Bind-mounted host directories on macOS (Docker Desktop /
+# OrbStack) are exposed with noexec/nodev and reject mknod, so we copy the
+# config into a container-native path before building, then copy the produced
+# ISO back into the host-mounted output dir.
 docker run --rm --privileged \
-  -v "$REPO_ROOT":/work \
-  -w /work/iso \
+  -v "$ISO_CONFIG_DIR":/srv/iso:ro \
+  -v "$BUILD_DIR":/out \
   -e VERSION="$VERSION" \
   -e DEBIAN_FRONTEND=noninteractive \
   debian:12 \
@@ -38,20 +43,26 @@ docker run --rm --privileged \
       grub-pc-bin grub-efi-amd64-bin \
       mtools dosfstools ca-certificates
 
-    lb clean --purge >/dev/null 2>&1 || true
+    mkdir -p /build
+    cp -a /srv/iso/. /build/
+    cd /build
+
     lb config
     lb build
+
+    cp -f /build/*.iso /out/
   '
 
-# live-build emits the ISO into iso/ with a fixed name; rename it into build/.
-iso_src="$(find "$ISO_CONFIG_DIR" -maxdepth 1 -type f -name '*.iso' -print -quit)"
+iso_src="$(find "$BUILD_DIR" -maxdepth 1 -type f -name '*.iso' -print -quit)"
 if [[ -z "$iso_src" ]]; then
   echo "No ISO produced by live-build." >&2
   exit 1
 fi
 
 iso_dest="$BUILD_DIR/karaoke-machine-${VERSION}.iso"
-mv "$iso_src" "$iso_dest"
+if [[ "$iso_src" != "$iso_dest" ]]; then
+  mv "$iso_src" "$iso_dest"
+fi
 ( cd "$BUILD_DIR" && sha256sum "$(basename "$iso_dest")" > "$(basename "$iso_dest").sha256" )
 
 echo ">>> Built: $iso_dest"
