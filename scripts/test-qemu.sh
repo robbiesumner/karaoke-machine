@@ -36,9 +36,8 @@ esac
 
 echo ">>> Booting $iso (accel=$accel)"
 exec qemu-system-x86_64 \
-  -accel "$accel" \
+  -machine "type=q35,accel=$accel" \
   -m 4G \
   -smp 2 \
   -cdrom "$iso" \
-  -boot d \
   -vga virtio
