@@ -1,125 +1,205 @@
-# Karaoke Kiosk
+# CLAUDE.md
 
-Plug-and-play karaoke appliance. NixOS, declarative, shipped as flashable ISO. Boots into UltraStar Deluxe (USDX). Songs added via Samba. Wireless keyboard is the only remote.
+Guidance for Claude (and any other LLM agent) working in this repository.
+Humans are also encouraged to read it — it doubles as the project guideline.
 
-## North Star
+---
 
-**Trivial for non-technical users.** Target user: my mom. If a feature needs explaining, it's broken. When in doubt, remove a step.
+## What this project is
 
-- Plug in → boots into karaoke. No login, no menus.
-- Mics work on plug-in. No config dialogs.
-- Add songs → drop folder on network share.
-- Navigate → arrow keys + Enter.
+**karaoke-machine** is a plug-and-play Linux distribution for hosting karaoke parties.
+Think *Batocera, but for UltraStar*.
 
-## Scope (v1)
+Boot the ISO on a PC, plug in SingStar mics and a TV, drop songs into a network share,
+and start singing. No terminal, no fiddling, no Linux knowledge required from the user.
 
-- **Hardware:** Beelink N100 or similar fanless x86_64 mini PC, HDMI to TV.
-- **Inputs:** 2x SingStar USB mics (composite device, 2 channels). 1x wireless USB-dongle keyboard with trackpad.
-- **OS:** NixOS, custom installer ISO.
-- **Engine:** UltraStar Deluxe, fullscreen kiosk.
-- **Songs:** Local dir, exposed as read-write Samba share, no auth (LAN-only appliance).
+## North star
 
-**Not in v1:** companion service, HTTP API, phone UI, QR codes, queue management beyond USDX, cross-session scoreboards, non-keyboard remotes. See [Future work](#future-work).
+A non-technical friend should be able to:
 
-## User flows
+1. Flash the ISO to a USB stick.
+2. Boot a random PC into karaoke mode.
+3. Be singing within 60 seconds (assuming songs are already on the share).
 
-**First boot (owner, once):** flash ISO → installer wipes disk → TUI wizard on tty1 asks WiFi → writes config, touches sentinel, reboots → never shown again.
+If a step in that flow needs Linux knowledge, it is a bug.
 
-**Daily:** plug in → ~30s → USDX song-select on TV → arrow keys + Enter.
+## v1 scope (locked — do not expand without explicit approval)
 
-**Add songs:** mount `\\karaoke\songs` (or `smb://karaoke.local/songs`) → drop UltraStar folders (`.txt` + audio + optional cover/video) → press `R` in USDX to rescan. ISO ships zero songs (licensing).
+**In scope (mandatory):**
 
-## Architecture
+- Bootable hybrid ISO for `x86_64` (BIOS + UEFI).
+- Boots directly into UltraStar Deluxe (USDX) in fullscreen kiosk mode.
+- Detects the classic SingStar USB stereo mic adapter and assigns
+  Left → Player 1, Right → Player 2.
+- Samba share `\\karaoke-machine\songs` (guest writable) for adding/managing songs.
+- WiFi configurable via `nmtui` on tty2 (`Ctrl+Alt+F2`). Returning to tty1
+  resumes the karaoke session.
+- Verified boot + play on a Dell Optiplex (the test machine).
 
-Four NixOS modules:
+**Out of scope for v1 (do not be tempted):**
 
-1. **Kiosk session.** Autologin to `karaoke` user, no DM. Compositor launches USDX fullscreen. Crash → relaunch (never show desktop).
-2. **Audio.** PipeWire exposes SingStar's 2 channels as independent mic inputs (not stereo).
-3. **Samba.** Single share `songs` → `/var/lib/karaoke/songs/`, read-write, no auth.
-4. **First-boot wizard.** Systemd unit, gated by sentinel, whiptail TUI on tty1, WiFi only, reboots. Hostname is fixed to `karaoke` declaratively (no per-device customization in v1 — keeps `\\karaoke\songs` and `karaoke.local` valid for everyone).
+- Raspberry Pi / ARM builds.
+- Auto-update mechanism.
+- Web UI for configuration.
+- YouTube / streaming integration (PiKaraoke-style).
+- Multiple karaoke front-ends (UltraStar Play, WorldParty, OpenKJ, etc.).
+- Read-only root filesystem (defer to v2 / Buildroot migration).
+- Custom boot splash / theming.
+- Pretty in-game wifi UI (tty2 + nmtui is enough).
+- Song downloader, scoreboard server, anything cloud.
 
-## Repository layout (target — bootstrap in progress)
+If a contributor or agent proposes any of the above, decline politely and point
+them at `ROADMAP.md`.
+
+## Key architectural decisions and *why*
+
+| Decision               | Choice                       | Rationale (short)                                                                  |
+| ---------------------- | ---------------------------- | ---------------------------------------------------------------------------------- |
+| Base OS                | Debian 12 (Bookworm)         | Boring, stable, no Snap, well-documented `live-build` for custom ISOs.             |
+| Karaoke front-end      | UltraStar Deluxe (Flatpak)   | Mature, active in 2025-2026, best SingStar mic story, simple SDL2 app.             |
+| Display server         | Wayland via `cage`           | Cage is a single-window kiosk compositor — perfect for one-app appliance.          |
+| Audio                  | PipeWire (Debian 12 default) | Modern, handles USB audio devices cleanly, compatible with PulseAudio clients.     |
+| Networking             | NetworkManager + `nmtui`     | tty2 fallback is fine for v1. Replace with in-game UI in v3+.                      |
+| File sharing           | Samba (guest writable)       | Universal — Windows / macOS / Linux all mount it without extra software.           |
+| Init                   | systemd                      | Default on Debian; user services for the kiosk session.                            |
+| ISO build tool         | `live-build`                 | Debian-native, reproducible, supports BIOS + UEFI hybrid ISOs.                     |
+| Filesystem (installed) | Standard read-write ext4     | v1 keeps it simple. Read-only overlay is a v2 goal.                                |
+
+If you change one of these, update the table and explain why.
+
+## Why not Buildroot like Batocera (yet)?
+
+Buildroot is the right answer eventually — tiny images, ~5s boot, read-only root,
+trivial cross-architecture support. But:
+
+- Every package change requires a partial rebuild.
+- Packaging USDX as a Buildroot package is a project of its own.
+- v1 is about *learning the problem domain* (mic detection, songs UX, audio
+  routing on real hardware), not *learning a new build system*.
+
+Plan: ship Debian-based v1, validate the UX, then migrate to Buildroot in v2
+once we know exactly what we need.
+
+## Repo layout
 
 ```
-flake.nix              # ISO, NixOS configs, devShell
-nix/
-  modules/
-    kiosk.nix          # autologin, compositor, USDX launch loop
-    audio.nix          # PipeWire + SingStar mics
-    samba.nix          # songs share
-    firstboot.nix      # TUI wizard
-    networking.nix     # NetworkManager + avahi
-  iso.nix              # installer ISO
-  system.nix           # installed appliance config
-docs/                  # end-user + contributor docs
+karaoke-machine/
+├── CLAUDE.md                  # this file
+├── README.md                  # user-facing intro and quickstart
+├── ROADMAP.md                 # versioned milestones
+├── LICENSE
+├── build/                     # ISO build artifacts (gitignored)
+├── iso/                       # live-build configuration
+│   ├── auto/                  # live-build hooks
+│   ├── config/
+│   │   ├── package-lists/     # which Debian packages go in the ISO
+│   │   ├── hooks/             # chroot scripts run during build
+│   │   └── includes.chroot/   # files copied into the ISO root filesystem
+│   └── README.md
+├── overlay/                   # files that end up in / on the live system
+│   ├── etc/
+│   │   ├── samba/smb.conf
+│   │   ├── systemd/system/
+│   │   └── karaoke-machine/
+│   ├── usr/local/bin/         # our scripts (kiosk launcher, mic setup, etc.)
+│   └── home/karaoke/          # default user profile, USDX config templates
+├── scripts/
+│   ├── build-iso.sh           # one-shot ISO build
+│   ├── test-qemu.sh           # boot the ISO in QEMU for fast iteration
+│   ├── flash-usb.sh           # safer wrapper around dd
+│   └── detect-singstar.sh     # runtime: writes USDX mic config
+├── docs/
+│   ├── singstar-mics.md       # how the SingStar dongle works, channel mapping
+│   ├── kiosk-architecture.md  # what runs where, in what order
+│   └── testing.md             # manual test checklist before tagging a release
+└── .github/workflows/         # build the ISO on tag, publish to releases
+```
+
+## Common commands
+
+> All commands assume you are at the repo root unless noted. Build commands
+> need Docker; you do not need to run any of them as root.
+
+```bash
+# Build the ISO (writes to build/karaoke-machine-<version>.iso)
+./scripts/build-iso.sh
+
+# Boot the latest built ISO in QEMU for fast iteration
+./scripts/test-qemu.sh
+
+# Boot QEMU with USB audio passthrough (for testing the SingStar mic flow)
+./scripts/test-qemu.sh --usb-audio
+
+# Flash the latest ISO to a USB stick (interactive — asks before writing)
+./scripts/flash-usb.sh /dev/sdX
+
+# Run only the chroot hooks (faster iteration when tweaking overlay/)
+./scripts/build-iso.sh --hooks-only
+
+# Lint shell scripts
+shellcheck scripts/*.sh overlay/usr/local/bin/*
 ```
 
 ## Conventions
 
-**Nix:**
-- Flakes only. Pin nixpkgs in `flake.lock`, update intentionally.
-- Modules expose options under `services.karaoke.*`. `nix/system.nix` reads like an appliance description, not plumbing.
-- `pkgs.writeShellApplication` over loose scripts in units.
-- USDX from nixpkgs unless specific reason to override.
+- **Shell scripts** are POSIX `sh` where possible, `bash` only when needed.
+  Always `set -euo pipefail` at the top of bash scripts. Run through
+  `shellcheck` before committing.
+- **Systemd units** for our own services live under `overlay/etc/systemd/system/`
+  and are prefixed `karaoke-` (e.g. `karaoke-kiosk.service`,
+  `karaoke-mic-setup.service`).
+- **Configuration files** we ship to `/etc/karaoke-machine/` are the single source
+  of truth. Per-user state goes in `~/.config/karaoke-machine/`.
+- **The `karaoke` user** is the auto-login user. UID 1000. No password. No sudo.
+  An admin can drop to tty3 and log in as `root` (password set at build time,
+  default `karaoke` — document this loudly in `README.md`).
+- **Songs** live at `/var/lib/karaoke-machine/songs/`. The Samba share, the USDX
+  config, and any future tooling all point here. Never hardcode a different path.
+- **Logging**: prefer `journalctl` (systemd journal) over writing to files.
+  Our scripts use `logger -t karaoke-<name>` so logs are filterable.
+- **Versioning**: SemVer. v0.x = pre-release, v1.0.0 = first stable ISO.
 
-**Commits/PRs:** Conventional commits (`feat:`, `fix:`, `nix:`, `docs:`). One logical change per PR.
+## What NOT to do
 
-## Open decisions
+- **Do not** pull packages from third-party APT repos in the ISO build.
+  Debian main + Flathub (for USDX) only. Each new source is a maintenance burden.
+- **Do not** add a desktop environment. We have *one* app on screen, ever.
+- **Do not** install a display manager (gdm/sddm/lightdm). `cage` launched
+  by a systemd unit on tty1 is enough.
+- **Do not** introduce a config file format other than INI / plain text /
+  systemd unit syntax. No YAML for system config in v1.
+- **Do not** auto-download anything at first boot (songs, updates, telemetry).
+  v1 is fully offline-capable.
+- **Do not** change the karaoke front-end without updating `ROADMAP.md` and
+  this file's decision table.
+- **Do not** assume internet access exists. The WiFi requirement is for *after*
+  setup, not as a precondition.
 
-- **Compositor:** `cage` (Wayland kiosk). S1 VM-tested: cage starts, USDX renders fullscreen via native Wayland (`SDL_VIDEODRIVER=wayland` in `karaoke-session` — without it sdl2-compat picks Xwayland and ABRTs cage on USDX exit via the wlroots `xwayland_surface_destroy` assert). Inner shell loop respawns USDX on SIGTERM/SIGKILL, systemd `Restart=always` recovers cage on rare wlroots crashes. VM caveats — only present in `vmVariant`, real HW unaffected: needs `-vga virtio`, `WLR_RENDERER_ALLOW_SOFTWARE=1` (no GPU acceleration in qemu, llvmpipe path only), and `SDL_AUDIODRIVER=dummy` (no audio stack until S2). VM perf is unusable (TCG + llvmpipe + VNC stack) — that's a VM artifact, not a kiosk issue; real Beelink performance verified at S7. If HW rendering is poor on the N100, fall back to Xorg + minimal WM.
-- **Keyboard:** USB-dongle assumed. Bluetooth needs pre-pairing → breaks plug-and-play → v2.
-- **Updates:** v1 = reflash ISO. Remote-flake `nixos-rebuild` is v2.
-- **Auto-rescan:** v1 = press `R`. Filesystem watcher is nicer but more complex; reconsider after real-party usage.
+## Testing approach
 
-## Gotchas
+Two layers:
 
-- **SingStar = 1 USB device, 2 channels.** PipeWire sees one source; USDX must treat ch1/ch2 as separate mics, not stereo. Config in `nix/modules/audio.nix`.
-- **USDX on Wayland is flaky.** Xwayland or pure Xorg if needed. Don't over-engineer.
-- **USDX scales weirdly on 4K.** Force 1080p in kiosk session.
-- **mDNS/Samba** depends on router multicast. tty2 login banner (`services.getty.helpLine`) shows current IPv4 as `\\192.168.x.x\songs` fallback when `karaoke.local` doesn't resolve.
-- **SMB:** default SMB2+. Don't accommodate ancient Windows.
-- **Trackpad on the keyboard is irrelevant** to USDX. Don't design around it.
+1. **QEMU smoke test** (every commit, eventually CI):
+   - Boots to the kiosk session.
+   - USDX window appears within N seconds of boot.
+   - Samba share is reachable from the host.
+   - `nmtui` works on tty2.
+2. **Real-hardware test** (every tagged release, manual):
+   - Dell Optiplex (the reference machine).
+   - SingStar dongle plugged in → both mics register, both score independently
+     in USDX's input test screen.
+   - Songs dropped via Samba from a Mac and a Windows laptop appear in USDX
+     after a rescan.
+   - WiFi connect via `nmtui` succeeds and persists across reboot.
 
-## Common commands
+Manual checklist lives in `docs/testing.md`. **Do not tag a release without
+running it on real hardware.**
 
-```bash
-nix develop                                                 # dev shell
-nix build .#iso                                             # build installer ISO → result/iso/karaoke-*.iso
-nixos-rebuild build-vm --flake .#karaoke && ./result/bin/run-*-vm   # local VM of full system
-nix fmt                                                     # format
-nixos-rebuild switch --flake .#karaoke --target-host root@karaoke.local   # deploy to LAN device
-```
+## Working agreements for AI agents
 
-Local-environment wrappers (e.g. ssh into Linux VM) belong in `CLAUDE.local.md`.
-
-## Smoke test (before claiming a change works)
-
-Boot the VM and verify:
-
-- [ ] Boots to USDX song-select. No TTY, login, or desktop visible.
-- [ ] Killing USDX → session relaunches it. No desktop in between.
-- [ ] First-boot wizard runs once on fresh install, never again.
-- [ ] Both SingStar channels show as independent inputs (`pactl list sources` or USDX audio config).
-- [ ] Samba share mountable from LAN, no auth, read-write. Drop folder + press `R` → song appears.
-- [ ] 1080p forced on 4K (or sane VM display).
-
-Items not testable in VM (real mics, real 4K TV) → state explicitly in PR, don't tick.
-
-## Future work
-
-- **Phone remote/queue/scoreboard.** Likely path: companion service + USDX Lua plugin reporting game events (scores, song-finished) → web UI on LAN. USDX Lua plugins can make outbound HTTP, so integration is cleaner than it looks.
-- **Auto-update.** `nixos-rebuild` from remote flake, gated on idle.
-- **Auto-rescan** via filesystem watcher.
-- **Bluetooth keyboard** with guided pairing on first boot.
-- **Pre-curated song packs** if licensing-clean source exists.
-
-## Roadmap
-
-v1 broken into 7 sessions (S1–S7). See `docs/roadmap.md`. Pick the lowest unfinished session unless told otherwise.
-
-## Working rules
-
-- **Read this file before suggesting architecture changes.** v1 scope is intentionally narrow.
-- **VM-test before assuming things work.** Kiosk, audio, wizard all differ from a normal desktop.
-- **Treat the end user as my mom.** Power for steps/concepts she'd have to learn = wrong trade.
-- **Fewer moving parts.** Every extra service/dep/knob breaks on a Saturday night.
+- Read this file and `ROADMAP.md` before proposing changes.
+- Prefer minimal, reversible changes. We are early — over-engineering compounds.
+- When unsure between two approaches, pick the one that's easier to delete.
+- If a task implies expanding v1 scope, stop and ask the human first.
+- Always update `ROADMAP.md` when completing a milestone item, and update this
+  file's decision table when changing an architectural choice.
