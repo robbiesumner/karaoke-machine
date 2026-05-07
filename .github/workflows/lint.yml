@@ -1,0 +1,64 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect shell scripts
+        id: collect
+        shell: bash
+        run: |
+          shopt -s nullglob globstar
+          mapfile -t files < <(
+            { ls scripts/*.sh 2>/dev/null
+              ls overlay/usr/local/bin/* 2>/dev/null
+              ls iso/config/hooks/**/*.chroot 2>/dev/null
+              ls iso/config/hooks/**/*.binary 2>/dev/null
+            } | sort -u
+          )
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No shell scripts found yet — skipping shellcheck."
+            exit 0
+          fi
+          printf '%s\n' "${files[@]}" > /tmp/shell-files
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+      - name: Install shellcheck
+        if: steps.collect.outputs.skip == 'false'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends shellcheck
+      - name: Run shellcheck
+        if: steps.collect.outputs.skip == 'false'
+        run: xargs -a /tmp/shell-files shellcheck
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: raven-actions/actionlint@v2
+        with:
+          files: ".github/workflows/*.yml"
+
+  commit-lint:
+    name: commit messages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: .commitlintrc.json
