@@ -5,6 +5,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ISO_CONFIG_DIR="$REPO_ROOT/iso"
+OVERLAY_DIR="$REPO_ROOT/overlay"
 BUILD_DIR="$REPO_ROOT/build"
 
 VERSION="${VERSION:-}"
@@ -31,6 +32,7 @@ echo ">>> Building karaoke-machine ISO version: $VERSION"
 # ISO back into the host-mounted output dir.
 docker run --rm --privileged \
   -v "$ISO_CONFIG_DIR":/srv/iso:ro \
+  -v "$OVERLAY_DIR":/srv/overlay:ro \
   -v "$BUILD_DIR":/out \
   -e VERSION="$VERSION" \
   -e DEBIAN_FRONTEND=noninteractive \
@@ -45,8 +47,15 @@ docker run --rm --privileged \
 
     mkdir -p /build
     cp -a /srv/iso/. /build/
-    cd /build
 
+    # overlay/ is the canonical source of files that end up in the live
+    # filesystem; live-build expects them under config/includes.chroot/.
+    mkdir -p /build/config/includes.chroot
+    cp -a /srv/overlay/. /build/config/includes.chroot/
+    # Drop scaffolding placeholders from empty overlay dirs.
+    find /build/config/includes.chroot -name .gitkeep -delete
+
+    cd /build
     lb config
     lb build
 
