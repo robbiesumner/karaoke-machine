@@ -1,0 +1,4 @@
+# Packages installed into the karaoke-machine ISO root filesystem.
+# Empty for the v0.1 baseline checkpoint — the ISO ships with default
+# Debian live components only. Kiosk packages (cage, flatpak, etc.)
+# land in subsequent commits.
