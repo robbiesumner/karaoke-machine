@@ -1,0 +1,84 @@
+name: build-iso
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-iso-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: build hybrid ISO
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check buildable
+        id: gate
+        shell: bash
+        run: |
+          if [[ -x scripts/build-iso.sh && -d iso ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::scripts/build-iso.sh or iso/ missing — ISO build skipped (pre-v0.1)."
+          fi
+
+      - name: Cache live-build chroot
+        if: steps.gate.outputs.ready == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/cache
+            build/.build
+          key: live-build-${{ hashFiles('iso/config/package-lists/**', 'iso/auto/**') }}
+          restore-keys: |
+            live-build-
+
+      - name: Install live-build toolchain
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            live-build debootstrap squashfs-tools xorriso \
+            isolinux syslinux-common \
+            grub-pc-bin grub-efi-amd64-bin \
+            mtools dosfstools
+
+      - name: Build ISO
+        if: steps.gate.outputs.ready == 'true'
+        run: sudo ./scripts/build-iso.sh
+
+      - name: Compute SHA256SUMS
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: build
+        run: sha256sum karaoke-machine-*.iso > SHA256SUMS
+
+      - name: Upload ISO artifact
+        if: steps.gate.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: karaoke-machine-iso-${{ github.sha }}
+          path: |
+            build/karaoke-machine-*.iso
+            build/SHA256SUMS
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: steps.gate.outputs.ready == 'true' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/karaoke-machine-*.iso
+            build/SHA256SUMS
+          fail_on_unmatched_files: true

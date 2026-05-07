@@ -1,0 +1,6 @@
+.idea
+build/
+.cache/
+*.iso
+*.iso.sha256
+.DS_Store
