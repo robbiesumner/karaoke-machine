@@ -9,7 +9,8 @@
 - `config/package-lists/` — Debian packages installed into the ISO
 - `config/hooks/` — chroot scripts executed during the build
 - `config/includes.chroot/` — files copied verbatim into the ISO root
-  filesystem (paired with `../overlay/` at build time)
+  filesystem. Built at runtime from `../overlay/` by
+  `scripts/build-iso.sh` — edit `../overlay/` rather than this dir.
 
 ## Reference
 

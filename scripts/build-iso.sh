@@ -1,11 +1,31 @@
 #!/usr/bin/env bash
 # Build the karaoke-machine ISO via live-build inside a debian:12 container.
 # Works on macOS and Linux hosts. Requires Docker.
+#
+# Usage:
+#   ./scripts/build-iso.sh             full clean build (~10 min)
+#   ./scripts/build-iso.sh --fast      reuse persistent chroot (~2-3 min)
+#                                      use after the first full build to
+#                                      iterate on overlay/ or config/hooks/
 set -euo pipefail
+
+FAST=0
+for arg in "$@"; do
+  case "$arg" in
+    --fast|--hooks-only|--reuse) FAST=1 ;;
+    --help|-h)
+      sed -n '2,/^set /p' "$0" | sed 's/^# \?//;/^set /d'
+      exit 0
+      ;;
+    *) echo "Unknown arg: $arg" >&2; exit 2 ;;
+  esac
+done
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ISO_CONFIG_DIR="$REPO_ROOT/iso"
+OVERLAY_DIR="$REPO_ROOT/overlay"
 BUILD_DIR="$REPO_ROOT/build"
+BUILD_VOLUME="karaoke-machine-build"
 
 VERSION="${VERSION:-}"
 if [[ -z "$VERSION" && -f "$REPO_ROOT/version.txt" ]]; then
@@ -21,18 +41,22 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 mkdir -p "$BUILD_DIR"
+docker volume create "$BUILD_VOLUME" >/dev/null
 
-echo ">>> Building karaoke-machine ISO version: $VERSION"
+echo ">>> Building karaoke-machine ISO version: $VERSION (fast=$FAST)"
 
-# The live-build chroot is created via debootstrap, which requires `mknod` to
-# populate /dev. Bind-mounted host directories on macOS (Docker Desktop /
-# OrbStack) are exposed with noexec/nodev and reject mknod, so we copy the
-# config into a container-native path before building, then copy the produced
-# ISO back into the host-mounted output dir.
+# Bind-mounted host directories on macOS (Docker Desktop / OrbStack) reject
+# mknod, which debootstrap needs to populate /dev. Keep the chroot inside a
+# container-native named volume (lives on the Linux VM's filesystem and
+# supports mknod) and only bind-mount the inputs (read-only) and the output
+# directory.
 docker run --rm --privileged \
   -v "$ISO_CONFIG_DIR":/srv/iso:ro \
+  -v "$OVERLAY_DIR":/srv/overlay:ro \
   -v "$BUILD_DIR":/out \
+  -v "$BUILD_VOLUME":/build \
   -e VERSION="$VERSION" \
+  -e FAST="$FAST" \
   -e DEBIAN_FRONTEND=noninteractive \
   debian:12 \
   bash -euo pipefail -c '
@@ -41,14 +65,50 @@ docker run --rm --privileged \
       live-build debootstrap squashfs-tools xorriso \
       isolinux syslinux-common \
       grub-pc-bin grub-efi-amd64-bin \
-      mtools dosfstools ca-certificates
+      mtools dosfstools ca-certificates rsync
 
-    mkdir -p /build
-    cp -a /srv/iso/. /build/
+    sync_inputs() {
+      # Refresh live-build config (auto/, config/, etc.) from source without
+      # touching the persisted chroot/, cache/, or .build/ state.
+      rsync -a --delete \
+        --exclude=/chroot --exclude=/cache --exclude=/.build --exclude=/binary \
+        --exclude=/*.iso --exclude=/*.contents --exclude=/*.files \
+        --exclude=/*.packages --exclude=/binary.list \
+        /srv/iso/ /build/
+
+      # overlay/ → live-build expects files under config/includes.chroot/.
+      rm -rf /build/config/includes.chroot
+      mkdir -p /build/config/includes.chroot
+      cp -a /srv/overlay/. /build/config/includes.chroot/
+      find /build/config/includes.chroot -name .gitkeep -delete
+    }
+
     cd /build
 
-    lb config
-    lb build
+    if [[ "$FAST" = "1" && -d /build/chroot ]]; then
+      echo ">>> Fast mode: reusing existing chroot, re-running chroot + binary stages"
+      sync_inputs
+      # Re-run the entire chroot stage (idempotent — apt sees packages
+      # already installed, but re-runs includes, hooks, and re-stages the
+      # kernel into chroot/boot which the binary stage needs) and the
+      # binary stage. Keep .build/bootstrap_* so debootstrap is skipped.
+      find /build/.build -maxdepth 1 -type f \
+        \( -name "chroot_*" -o -name "binary_*" -o -name "build" \) -delete
+      lb config
+      lb build
+    else
+      if [[ "$FAST" = "1" ]]; then
+        echo ">>> Fast mode requested but no chroot present yet — doing a full build"
+      fi
+      echo ">>> Full build: wiping persistent volume"
+      find /build -mindepth 1 -delete 2>/dev/null || true
+      cp -a /srv/iso/. /build/
+      mkdir -p /build/config/includes.chroot
+      cp -a /srv/overlay/. /build/config/includes.chroot/
+      find /build/config/includes.chroot -name .gitkeep -delete
+      lb config
+      lb build
+    fi
 
     cp -f /build/*.iso /out/
   '
