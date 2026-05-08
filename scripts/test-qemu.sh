@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Boot the most recently built karaoke-machine ISO in QEMU.
+#
+# Serial console is mirrored to this terminal (ttyS0 in the guest). Kernel
+# logs and init/userspace logs appear here, so you can debug boot even when
+# the graphical window is blank.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,7 +15,8 @@ fi
 
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
   echo "qemu-system-x86_64 not found. Install QEMU:" >&2
-  echo "  macOS: brew install qemu" >&2
+  echo "  macOS:        brew install qemu" >&2
+  echo "  NixOS:        nix-env -iA nixos.qemu_full   (or add to systemPackages)" >&2
   echo "  Debian/Ubuntu: sudo apt install qemu-system-x86" >&2
   exit 1
 fi
@@ -34,31 +39,20 @@ case "$(uname -s)" in
   *)      accel="tcg" ;;
 esac
 
-firmware_args=()
-for fw in \
-  /usr/local/share/qemu/edk2-x86_64-code.fd \
-  /opt/homebrew/share/qemu/edk2-x86_64-code.fd \
-  /usr/share/OVMF/OVMF_CODE.fd \
-  /usr/share/edk2/x64/OVMF_CODE.fd
-do
-  if [[ -f "$fw" ]]; then
-    firmware_args=(-bios "$fw")
-    echo ">>> Using UEFI firmware: $fw"
-    break
-  fi
-done
-if (( ${#firmware_args[@]} == 0 )); then
-  echo ">>> No UEFI firmware found, falling back to legacy BIOS"
-fi
+cat <<EOF
+>>> Booting $iso
+>>> accel:  $accel
+>>> serial: streamed below (ttyS0 in guest)
+>>> Press Ctrl-A then X (or close the QEMU window) to quit.
+EOF
 
-echo ">>> Booting $iso (accel=$accel)"
 exec qemu-system-x86_64 \
   -machine "accel=$accel" \
-  "${firmware_args[@]}" \
   -m 4G \
   -smp 2 \
   -cdrom "$iso" \
   -vga virtio \
   -usb \
   -device usb-kbd \
-  -k en-us
+  -k en-us \
+  -serial mon:stdio

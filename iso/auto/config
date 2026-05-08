@@ -11,10 +11,10 @@ lb config noauto \
   --bootloaders "syslinux,grub-efi" \
   --linux-flavours amd64 \
   --archive-areas "main contrib non-free non-free-firmware" \
-  --apt-recommends false \
   --memtest none \
   --image-name karaoke-machine \
   --iso-application "karaoke-machine" \
   --iso-publisher "https://github.com/robbiesumner/karaoke-machine" \
   --iso-volume "karaoke-machine" \
+  --bootappend-live "boot=live components username=karaoke hostname=karaoke-machine console=tty1 console=ttyS0,115200n8" \
   "${@}"
